@@ -7,6 +7,16 @@ const moderation = require('./handlers/moderation');
 const { ask } = require('./lib/ai');
 const api = require('./lib/api');
 
+// Fail loudly and early if a required variable is missing — otherwise
+// discord.js throws an obscure error much later with no context.
+const REQUIRED = ['DISCORD_TOKEN', 'CLIENT_ID'];
+const missing = REQUIRED.filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error(`FATAL: missing required variable(s): ${missing.join(', ')}`);
+  console.error('Add these in Railway under the service -> Variables, then redeploy.');
+  process.exit(1);
+}
+
 store.load();
 
 const client = new Client({
@@ -269,4 +279,16 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.login(config.token);
+// Surface crashes in the Railway log instead of dying silently.
+process.on('unhandledRejection', (err) => console.error('unhandledRejection:', err));
+process.on('uncaughtException', (err) => console.error('uncaughtException:', err));
+
+client.on('error', (err) => console.error('client error:', err.message));
+
+client.login(config.token).catch((err) => {
+  console.error('LOGIN FAILED:', err.message);
+  if (/token|unauthorized/i.test(err.message)) {
+    console.error('Check DISCORD_TOKEN in Railway variables — reset it in the Developer Portal if unsure.');
+  }
+  process.exit(1);
+});
