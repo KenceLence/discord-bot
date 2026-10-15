@@ -10,7 +10,6 @@ module.exports = {
   ticket: {
     categoryId: process.env.TICKET_CATEGORY_ID,
     closedCategoryId: process.env.TICKET_CLOSED_CATEGORY_ID,
-    supportRoleId: process.env.TICKET_SUPPORT_ROLE_ID,
     logChannelId: process.env.TICKET_LOG_CHANNEL_ID,
 
     maxOpenPerUser: Number(process.env.TICKET_MAX_OPEN_PER_USER || 3),
