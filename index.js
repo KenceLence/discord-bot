@@ -44,7 +44,44 @@ client.once('ready', async () => {
   startAutoClose();
   startAlertSweep();
   if (process.env.API_KEY) api.start(client);
+  syncCommands();
 });
+
+/**
+ * Register slash commands on startup, and only when they differ from what is
+ * already registered — so a redeploy does not churn Discord's rate limit.
+ */
+async function syncCommands() {
+  if (!config.clientId) return;
+
+  const { REST, Routes } = require('discord.js');
+  const { commands } = require('./scripts/deploy');
+
+  const body = Object.values(commands).map((c) => c.toJSON());
+  const rest = new REST({ version: '10' }).setToken(config.token);
+  const route = config.guildId
+    ? Routes.applicationGuildCommands(config.clientId, config.guildId)
+    : Routes.applicationCommands(config.clientId);
+
+  try {
+    const current = await rest.get(route);
+    const unchanged =
+      current.length === body.length &&
+      body.every((c) => current.some((e) => e.name === c.name && e.description === c.description));
+
+    if (unchanged) {
+      console.log(`Slash commands already up to date (${current.length}).`);
+      return;
+    }
+
+    await rest.put(route, { body });
+    console.log(
+      `Registered ${body.length} slash commands${config.guildId ? ' (guild, instant)' : ' (global, up to 1h)'}.`
+    );
+  } catch (err) {
+    console.error('Slash command sync failed:', err.message);
+  }
+}
 
 /** Periodically flag tickets nobody has replied to. */
 function startAlertSweep() {

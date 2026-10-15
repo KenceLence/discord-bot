@@ -158,19 +158,25 @@ const commands = {
     .addStringOption((o) => o.setName('question').setDescription('Your question').setRequired(true)),
 };
 
-(async () => {
-  const body = Object.values(commands).map((c) => c.toJSON());
-  const rest = new REST({ version: '10' }).setToken(token);
+module.exports = { commands };
 
-  if (guildId) {
-    // Instant in your test server
-    await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
-    console.log('Slash commands registered (guild, instant).');
-  } else {
-    await rest.put(Routes.applicationCommands(clientId), { body });
-    console.log('Slash commands registered (global, may take ~1h).');
-  }
-})().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Only push to Discord when run directly (`npm run deploy-commands`),
+// not when index.js imports the command definitions.
+if (require.main === module) {
+  (async () => {
+    const body = Object.values(commands).map((c) => c.toJSON());
+    const rest = new REST({ version: '10' }).setToken(token);
+
+    if (guildId) {
+      // Instant in your test server
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
+      console.log('Slash commands registered (guild, instant).');
+    } else {
+      await rest.put(Routes.applicationCommands(clientId), { body });
+      console.log('Slash commands registered (global, may take ~1h).');
+    }
+  })().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
