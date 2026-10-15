@@ -48,8 +48,8 @@ client.once('ready', async () => {
 });
 
 /**
- * Register slash commands on startup, and only when they differ from what is
- * already registered — so a redeploy does not churn Discord's rate limit.
+ * Register slash commands on startup, delete any stale ones we no longer
+ * define, and skip the write when nothing changed (avoids rate-limit churn).
  */
 async function syncCommands() {
   if (!config.clientId) return;
@@ -58,12 +58,29 @@ async function syncCommands() {
   const { commands } = require('./scripts/deploy');
 
   const body = Object.values(commands).map((c) => c.toJSON());
+  const wanted = new Set(body.map((c) => c.name));
   const rest = new REST({ version: '10' }).setToken(config.token);
-  const route = config.guildId
+
+  const guildRoute = config.guildId
     ? Routes.applicationGuildCommands(config.clientId, config.guildId)
-    : Routes.applicationCommands(config.clientId);
+    : null;
+  const globalRoute = Routes.applicationCommands(config.clientId);
 
   try {
+    // Remove leftovers from earlier versions, at both scopes.
+    const scopes = [...(guildRoute ? [['guild', guildRoute]] : []), ['global', globalRoute]];
+
+    for (const [scope, route] of scopes) {
+      const existing = await rest.get(route);
+      const stale = existing.filter((c) => !wanted.has(c.name));
+
+      for (const command of stale) {
+        await rest.delete(`${route}/${command.id}`);
+        console.log(`Removed stale ${scope} command: /${command.name}`);
+      }
+    }
+
+    const route = guildRoute || globalRoute;
     const current = await rest.get(route);
     const unchanged =
       current.length === body.length &&
@@ -76,7 +93,7 @@ async function syncCommands() {
 
     await rest.put(route, { body });
     console.log(
-      `Registered ${body.length} slash commands${config.guildId ? ' (guild, instant)' : ' (global, up to 1h)'}.`
+      `Registered ${body.length} slash commands${guildRoute ? ' (guild, instant)' : ' (global, up to 1h)'}.`
     );
   } catch (err) {
     console.error('Slash command sync failed:', err.message);
